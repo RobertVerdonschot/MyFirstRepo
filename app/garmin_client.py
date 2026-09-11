@@ -34,22 +34,30 @@ def _unpack_tokenstore(tokens_b64: str) -> str:
 
 class GarminClient:
     def __init__(self, tokenstore_path: str | None = None, tokens_b64: str | None = None) -> None:
-        if tokenstore_path:
-            self._tokenstore = tokenstore_path
-        elif tokens_b64:
-            self._tokenstore = _unpack_tokenstore(tokens_b64)
-        else:
-            raise GarminNotAuthenticated(
-                "No Garmin tokenstore configured (neither GARMIN_TOKENSTORE nor GARMIN_TOKENS_B64)."
-            )
+        # Deliberately doesn't unpack/validate anything here: meal-logging
+        # doesn't need Garmin at all, so a missing/bad tokenstore should only
+        # break the code paths that actually call Garmin (see _get_api),
+        # not construction of this client.
+        self._tokenstore_path = tokenstore_path
+        self._tokens_b64 = tokens_b64
         self._api: Garmin | None = None
 
     def _get_api(self) -> Garmin:
         if self._api is not None:
             return self._api
+
+        if self._tokenstore_path:
+            tokenstore = self._tokenstore_path
+        elif self._tokens_b64:
+            tokenstore = _unpack_tokenstore(self._tokens_b64)
+        else:
+            raise GarminNotAuthenticated(
+                "No Garmin tokenstore configured (neither GARMIN_TOKENSTORE nor GARMIN_TOKENS_B64)."
+            )
+
         api = Garmin()
         try:
-            api.login(self._tokenstore)
+            api.login(tokenstore)
         except (GarminConnectAuthenticationError, GarminConnectConnectionError) as exc:
             raise GarminNotAuthenticated(
                 "Saved Garmin session was rejected. Re-run garmin_login_setup.py and re-upload it."

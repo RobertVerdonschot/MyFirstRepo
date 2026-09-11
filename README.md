@@ -1,7 +1,8 @@
 # Meal Stress Analyzer
 
-Log je maaltijden via Telegram, koppel dat aan je Garmin-stressdata, en zie
-welk eten samenhangt met een hogere lichaamsstress na het eten.
+Log je maaltijden via Telegram of via een webapp-snelkoppeling op je
+startscherm, koppel dat aan je Garmin-stressdata, en zie welk eten
+samenhangt met een hogere lichaamsstress na het eten.
 
 Draait serverless op Google Cloud Run; alle data komt in een Google Sheet
 terecht (makkelijk zelf in te kijken, en direct te delen of als CSV te
@@ -11,11 +12,13 @@ gebruiker met een paar berichten per dag kom je daar niet in de buurt).
 
 ## Hoe het werkt
 
-1. Je stuurt een berichtje naar je eigen Telegram-bot met wat je hebt
-   gegeten. Telegram roept daarvoor direct de Cloud Run-service aan (een
-   "webhook"), die alleen draait op het moment dat er iets gebeurt. Staat er
-   geen tijd in je bericht, dan wordt het tijdstip van het Telegram-bericht
-   gebruikt als eettijd.
+1. Je logt wat je hebt gegeten, via Telegram of via de webapp-snelkoppeling
+   op je startscherm -- allebei schrijven naar dezelfde spreadsheet, kies
+   wat je op een moment handiger vindt. Telegram roept daarvoor direct de
+   Cloud Run-service aan (een "webhook"); de webapp praat via een paar
+   simpele API-routes met diezelfde service. Beide draaien alleen op het
+   moment dat er iets gebeurt. Staat er geen tijd in je bericht, dan wordt
+   het moment van loggen gebruikt als eettijd.
 2. Elke nacht (en op elk moment dat je `/analyse` gebruikt) haalt een
    Cloud Scheduler-taak je Garmin-stressdata, hartslag en body battery op via
    de onofficiele `garminconnect`-library, en slaat zowel de ruwe API-respons
@@ -37,9 +40,11 @@ is een simpele woordsplitser, geen voedingsdatabase.
 
 ## Architectuur
 
-- **Cloud Run**: host de Flask-webapp (`main.py`). Schaalt naar 0 als er
-  niets gebeurt, wordt wakker bij een binnenkomend Telegram-bericht of de
-  dagelijkse Cloud Scheduler-taak.
+- **Cloud Run**: host de Flask-app (`main.py`), met twee ingangen die dezelfde
+  code delen (`app/meal_logging.py`, `app/state.py`): de Telegram-webhook en
+  een kleine PWA (installeerbare webapp) op `/app`. Schaalt naar 0 als er
+  niets gebeurt, wordt wakker bij een binnenkomend bericht (via Telegram of
+  de webapp) of de dagelijkse Cloud Scheduler-taak.
 - **Google Sheet**: opslag, zes tabbladen. `leesmij` (het eerste tabblad --
   uitleg over elke tab/kolom, hoe de eigen `/analyse` van de bot werkt, en de
   kanttekeningen, geschreven zodat een ander tool of een AI de data zonder de
@@ -136,13 +141,34 @@ Stuur `/start` naar je bot in Telegram, dan een testbericht zoals "havermout
 met banaan", en check met `/maaltijden` of hij binnenkwam. `/analyse` heeft
 pas genoeg data na een paar dagen loggen.
 
+### 6. Webapp-snelkoppeling op je Android-startscherm (optioneel)
+
+`deploy.sh` print aan het einde een URL met een geheime token erin, iets als:
+
+```
+https://meal-stress-bot-xxxx.run.app/app?token=<lange-willekeurige-code>
+```
+
+Open die URL op je telefoon in Chrome, tik op het menu (drie puntjes) en kies
+"App toevoegen" of "Toevoegen aan startscherm". De token staat vast in die
+link, dus je hoeft nergens in te loggen -- het icoon werkt gewoon elke keer.
+Behandel die link als een wachtwoord: iedereen die 'm heeft kan mee loggen.
+Kwijt of gelekt? Verwijder de `WEBAPP_TOKEN`-regel uit `.deploy_state.env` en
+draai `./deploy.sh` opnieuw voor een nieuwe token, en maak een nieuwe
+snelkoppeling.
+
 ## Gebruik
 
+**Via Telegram:**
 - Stuur een berichtje: `om 18:30 pizza margherita gegeten`
 - `/maaltijden` - laatste 10 gelogde maaltijden met hun id
 - `/verwijder <id>` - een verkeerd gelogde maaltijd wissen
 - `/analyse` - analyseer welk eten samenhangt met verhoogde stress
 - `/help` - uitleg in de bot zelf
+
+**Via de webapp:** open de snelkoppeling, typ wat je gegeten hebt, tik
+Loggen. De laatste 20 maaltijden staan eronder (met een wis-knop), en
+"Analyseer" geeft hetzelfde rapport als `/analyse` in Telegram.
 
 ## Kosten
 

@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 import logging
-import threading
 from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, request
 
 from app import telegram_api
 from app.analysis import run_analysis
-from app.config import Config, load_config
-from app.sheets_db import SheetsDatabase
-from app.food_extract import extract_food_tags
+from app.config import Config
 from app.garmin_client import GarminClient
-from app.time_parser import parse_meal_time
+from app.meal_logging import log_meal
+from app.sheets_db import SheetsDatabase
+from app.state import get_state
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("meal_stress_bot")
@@ -31,23 +30,6 @@ HELP_TEXT = (
     "/help - dit bericht"
 )
 
-_state: dict = {}
-_state_lock = threading.Lock()
-
-
-def _get_state() -> dict:
-    if not _state:
-        with _state_lock:
-            if not _state:
-                config = load_config()
-                _state["config"] = config
-                _state["db"] = SheetsDatabase(spreadsheet_id=config.spreadsheet_id)
-                _state["garmin"] = GarminClient(
-                    tokenstore_path=config.garmin_tokenstore,
-                    tokens_b64=config.garmin_tokens_b64,
-                )
-    return _state
-
 
 @bp.get("/health")
 def health():
@@ -56,7 +38,7 @@ def health():
 
 @bp.post("/telegram-webhook")
 def telegram_webhook():
-    state = _get_state()
+    state = get_state()
     config: Config = state["config"]
 
     if request.headers.get("X-Telegram-Bot-Api-Secret-Token") != config.telegram_secret_token:
@@ -70,7 +52,7 @@ def telegram_webhook():
 
 @bp.post("/tasks/fetch-garmin")
 def fetch_garmin_task():
-    state = _get_state()
+    state = get_state()
     config: Config = state["config"]
 
     if request.headers.get("X-Scheduler-Secret") != config.scheduler_shared_secret:
@@ -172,28 +154,20 @@ def _handle_meal(text: str, chat_id: int, message: dict, state: dict) -> None:
     db: SheetsDatabase = state["db"]
 
     message_time = datetime.fromtimestamp(message["date"], tz=timezone.utc)
-    meal_time, source, spans = parse_meal_time(text, message_time, config.timezone)
-    foods = extract_food_tags(text, spans)
-
-    meal_id = db.insert_meal(
+    result = log_meal(
+        db,
+        config,
+        text=text,
+        message_time=message_time,
         telegram_message_id=message.get("message_id"),
         chat_id=chat_id,
-        raw_text=text,
-        meal_time=meal_time,
-        time_source=source,
-        foods=foods,
         raw_update=message,
     )
-
-    time_note = {
-        "message": "tijdstip van je bericht",
-        "parsed": "tijd gevonden in je bericht",
-        "parsed-approx": "dag aangepast op basis van je bericht, tijd bij benadering",
-    }[source]
 
     _reply(
         config,
         chat_id,
-        f"Gelogd (#{meal_id}) om {meal_time.strftime('%Y-%m-%d %H:%M')} ({time_note}).\n"
-        f"Tags: {', '.join(foods) if foods else '(geen herkend)'}",
+        f"Gelogd (#{result.meal_id}) om {result.meal_time.strftime('%Y-%m-%d %H:%M')} "
+        f"({result.time_note}).\n"
+        f"Tags: {', '.join(result.foods) if result.foods else '(geen herkend)'}",
     )

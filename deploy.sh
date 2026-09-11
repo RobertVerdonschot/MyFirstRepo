@@ -77,6 +77,9 @@ fi
 if [ -z "${SCHEDULER_SHARED_SECRET:-}" ]; then
   SCHEDULER_SHARED_SECRET="$(openssl rand -hex 32)"
 fi
+if [ -z "${WEBAPP_TOKEN:-}" ]; then
+  WEBAPP_TOKEN="$(openssl rand -hex 24)"
+fi
 
 if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
   echo
@@ -122,6 +125,7 @@ SA_NAME=$SA_NAME
 SPREADSHEET_ID=$SPREADSHEET_ID
 TELEGRAM_SECRET_TOKEN=$TELEGRAM_SECRET_TOKEN
 SCHEDULER_SHARED_SECRET=$SCHEDULER_SHARED_SECRET
+WEBAPP_TOKEN=$WEBAPP_TOKEN
 TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
 ALLOWED_TELEGRAM_USER_ID=$ALLOWED_TELEGRAM_USER_ID
 TIMEZONE=$TIMEZONE
@@ -130,7 +134,7 @@ echo "(secrets/instellingen bewaard in $STATE_FILE zodat je dit script kan herha
 
 echo
 echo "-- Bouwen en deployen naar Cloud Run --"
-ENV_VARS="ALLOWED_TELEGRAM_USER_ID=${ALLOWED_TELEGRAM_USER_ID},TIMEZONE=${TIMEZONE},TELEGRAM_SECRET_TOKEN=${TELEGRAM_SECRET_TOKEN},SCHEDULER_SHARED_SECRET=${SCHEDULER_SHARED_SECRET},SPREADSHEET_ID=${SPREADSHEET_ID}"
+ENV_VARS="ALLOWED_TELEGRAM_USER_ID=${ALLOWED_TELEGRAM_USER_ID},TIMEZONE=${TIMEZONE},TELEGRAM_SECRET_TOKEN=${TELEGRAM_SECRET_TOKEN},SCHEDULER_SHARED_SECRET=${SCHEDULER_SHARED_SECRET},WEBAPP_TOKEN=${WEBAPP_TOKEN},SPREADSHEET_ID=${SPREADSHEET_ID}"
 SECRET_REFS="TELEGRAM_BOT_TOKEN=telegram-bot-token:latest"
 if [ "$GARMIN_SECRET_EXISTS" = "true" ]; then
   SECRET_REFS="${SECRET_REFS},GARMIN_TOKENS_B64=garmin-tokens-b64:latest"
@@ -172,7 +176,12 @@ fi
 echo
 echo "== Klaar =="
 echo "Stuur /start naar je bot in Telegram om te testen."
+echo
+echo "Webapp-snelkoppeling (open deze URL op je Android-telefoon in Chrome, dan"
+echo "menu > 'App toevoegen'/'Toevoegen aan startscherm'):"
+echo
+echo "  ${SERVICE_URL}/app?token=${WEBAPP_TOKEN}"
+echo
 if [ "$GARMIN_SECRET_EXISTS" = "false" ]; then
-  echo
   echo "Nog te doen voor /analyse werkt: Garmin-login (zie README, stap 'Garmin koppelen')."
 fi
