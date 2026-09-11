@@ -16,7 +16,7 @@ class Config:
     timezone: ZoneInfo
     telegram_secret_token: str
     scheduler_shared_secret: str
-    project_id: str | None
+    spreadsheet_id: str
     garmin_tokens_b64: str | None
     garmin_tokenstore: str | None
 
@@ -36,7 +36,7 @@ def load_config() -> Config:
         timezone=ZoneInfo(os.getenv("TIMEZONE", "Europe/Amsterdam")),
         telegram_secret_token=_require("TELEGRAM_SECRET_TOKEN"),
         scheduler_shared_secret=_require("SCHEDULER_SHARED_SECRET"),
-        project_id=os.getenv("PROJECT_ID"),
+        spreadsheet_id=_require("SPREADSHEET_ID"),
         garmin_tokens_b64=os.getenv("GARMIN_TOKENS_B64") or None,
         garmin_tokenstore=os.getenv("GARMIN_TOKENSTORE") or None,
     )

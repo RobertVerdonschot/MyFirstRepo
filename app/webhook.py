@@ -9,7 +9,7 @@ from flask import Blueprint, request
 from app import telegram_api
 from app.analysis import run_analysis
 from app.config import Config, load_config
-from app.firestore_db import FirestoreDatabase
+from app.sheets_db import SheetsDatabase
 from app.food_extract import extract_food_tags
 from app.garmin_client import GarminClient
 from app.time_parser import parse_meal_time
@@ -41,7 +41,7 @@ def _get_state() -> dict:
             if not _state:
                 config = load_config()
                 _state["config"] = config
-                _state["db"] = FirestoreDatabase(project=config.project_id)
+                _state["db"] = SheetsDatabase(spreadsheet_id=config.spreadsheet_id)
                 _state["garmin"] = GarminClient(
                     tokenstore_path=config.garmin_tokenstore,
                     tokens_b64=config.garmin_tokens_b64,
@@ -76,7 +76,7 @@ def fetch_garmin_task():
     if request.headers.get("X-Scheduler-Secret") != config.scheduler_shared_secret:
         return "forbidden", 403
 
-    db: FirestoreDatabase = state["db"]
+    db: SheetsDatabase = state["db"]
     garmin: GarminClient = state["garmin"]
 
     today = datetime.now(config.timezone).date()
@@ -130,7 +130,7 @@ def _reply(config: Config, chat_id: int, text: str) -> None:
 
 def _handle_command(text: str, chat_id: int, message: dict, state: dict) -> None:
     config: Config = state["config"]
-    db: FirestoreDatabase = state["db"]
+    db: SheetsDatabase = state["db"]
     garmin: GarminClient = state["garmin"]
 
     command, *rest = text.split(maxsplit=1)
@@ -169,7 +169,7 @@ def _handle_command(text: str, chat_id: int, message: dict, state: dict) -> None
 
 def _handle_meal(text: str, chat_id: int, message: dict, state: dict) -> None:
     config: Config = state["config"]
-    db: FirestoreDatabase = state["db"]
+    db: SheetsDatabase = state["db"]
 
     message_time = datetime.fromtimestamp(message["date"], tz=timezone.utc)
     meal_time, source, spans = parse_meal_time(text, message_time, config.timezone)

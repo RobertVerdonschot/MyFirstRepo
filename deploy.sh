@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
-# Provisions and deploys the meal-stress-analyzer on Google Cloud Run + Firestore.
+# Provisions and deploys the meal-stress-analyzer on Google Cloud Run,
+# storing everything in a Google Sheet.
 #
 # Run this in Google Cloud Shell (shell.cloud.google.com) -- it comes
 # pre-authenticated to your Google account and has gcloud, so you don't need
 # to install anything locally. Just clone the repo there and run this script.
 #
-# What this script does NOT do for you (because it needs credentials only
-# you have): creating the Telegram bot (via @BotFather in the Telegram app)
-# and the one-time interactive Garmin login (scripts/garmin_login_setup.py).
-# Everything else -- enabling APIs, Firestore, service account, secrets,
-# building and deploying the container, the webhook, the daily fetch job --
-# this script sets up.
+# What this script does NOT do for you (because it needs credentials/clicks
+# only you can do): creating the Telegram bot (via @BotFather), creating and
+# sharing the Google Sheet (see README, "Google Sheet aanmaken"), and the
+# one-time interactive Garmin login (scripts/garmin_login_setup.py).
+# Everything else -- enabling APIs, service account, secrets, building and
+# deploying the container, the webhook, the daily fetch job -- this script
+# sets up.
 set -euo pipefail
 
 STATE_FILE=".deploy_state.env"
@@ -40,27 +42,33 @@ echo
 echo "-- APIs inschakelen --"
 gcloud services enable \
   run.googleapis.com \
-  firestore.googleapis.com \
+  sheets.googleapis.com \
+  drive.googleapis.com \
   secretmanager.googleapis.com \
   cloudbuild.googleapis.com \
   cloudscheduler.googleapis.com \
   artifactregistry.googleapis.com \
   --project "$PROJECT_ID"
 
-echo "-- Firestore database (Native mode) --"
-if ! gcloud firestore databases describe --project "$PROJECT_ID" >/dev/null 2>&1; then
-  gcloud firestore databases create --project "$PROJECT_ID" --location="$REGION" --type=firestore-native
-else
-  echo "Bestaat al, overslaan."
-fi
-
 echo "-- Service account --"
 if ! gcloud iam service-accounts describe "$SA_EMAIL" --project "$PROJECT_ID" >/dev/null 2>&1; then
   gcloud iam service-accounts create "$SA_NAME" \
     --project "$PROJECT_ID" --display-name="Meal stress analyzer bot"
 fi
-gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-  --member="serviceAccount:${SA_EMAIL}" --role="roles/datastore.user" --condition=None >/dev/null
+# Geen GCP IAM-rol nodig voor Sheets-toegang: dat regel je door de sheet te
+# delen met het SA-e-mailadres hieronder, net als met een collega.
+
+echo
+echo "-- Google Sheet --"
+if [ -z "${SPREADSHEET_ID:-}" ]; then
+  echo "Maak (als je dat nog niet deed) een leeg Google Sheet op sheets.google.com,"
+  echo "en deel 'm als Editor met dit e-mailadres:"
+  echo
+  echo "  ${SA_EMAIL}"
+  echo
+  echo "De spreadsheet-id staat in de URL: https://docs.google.com/spreadsheets/d/<DIT-STUK>/edit"
+  read -rp "Spreadsheet-id: " SPREADSHEET_ID
+fi
 
 echo "-- Secrets --"
 if [ -z "${TELEGRAM_SECRET_TOKEN:-}" ]; then
@@ -111,6 +119,7 @@ PROJECT_ID=$PROJECT_ID
 REGION=$REGION
 SERVICE_NAME=$SERVICE_NAME
 SA_NAME=$SA_NAME
+SPREADSHEET_ID=$SPREADSHEET_ID
 TELEGRAM_SECRET_TOKEN=$TELEGRAM_SECRET_TOKEN
 SCHEDULER_SHARED_SECRET=$SCHEDULER_SHARED_SECRET
 TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
@@ -121,7 +130,7 @@ echo "(secrets/instellingen bewaard in $STATE_FILE zodat je dit script kan herha
 
 echo
 echo "-- Bouwen en deployen naar Cloud Run --"
-ENV_VARS="ALLOWED_TELEGRAM_USER_ID=${ALLOWED_TELEGRAM_USER_ID},TIMEZONE=${TIMEZONE},TELEGRAM_SECRET_TOKEN=${TELEGRAM_SECRET_TOKEN},SCHEDULER_SHARED_SECRET=${SCHEDULER_SHARED_SECRET},PROJECT_ID=${PROJECT_ID}"
+ENV_VARS="ALLOWED_TELEGRAM_USER_ID=${ALLOWED_TELEGRAM_USER_ID},TIMEZONE=${TIMEZONE},TELEGRAM_SECRET_TOKEN=${TELEGRAM_SECRET_TOKEN},SCHEDULER_SHARED_SECRET=${SCHEDULER_SHARED_SECRET},SPREADSHEET_ID=${SPREADSHEET_ID}"
 SECRET_REFS="TELEGRAM_BOT_TOKEN=telegram-bot-token:latest"
 if [ "$GARMIN_SECRET_EXISTS" = "true" ]; then
   SECRET_REFS="${SECRET_REFS},GARMIN_TOKENS_B64=garmin-tokens-b64:latest"

@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 from statistics import mean
 from zoneinfo import ZoneInfo
 
-from app.firestore_db import FirestoreDatabase, Meal
 from app.garmin_client import GarminClient, GarminNotAuthenticated
+from app.sheets_db import Meal, SheetsDatabase
 
 PRE_WINDOW = timedelta(minutes=30)
 POST_WINDOW_START = timedelta(minutes=60)
@@ -34,7 +34,7 @@ def _dates_needed(meals: list[Meal]) -> set[str]:
 
 
 def _ensure_stress_cached(
-    db: FirestoreDatabase, garmin: GarminClient, dates: set[str], tz: ZoneInfo
+    db: SheetsDatabase, garmin: GarminClient, dates: set[str], tz: ZoneInfo
 ) -> dict[str, str]:
     """Fetch and cache any missing dates. Returns {date: error} for failures."""
     errors: dict[str, str] = {}
@@ -56,15 +56,17 @@ def _window_avg(readings: list[tuple[datetime, int]], start: datetime, end: date
     return [value for ts, value in readings if start <= ts < end]
 
 
-def _evaluate_meal(db: FirestoreDatabase, meal: Meal) -> MealResult | None:
+def _evaluate_meal(
+    readings_by_date: dict[str, list[tuple[datetime, int]]], meal: Meal
+) -> MealResult | None:
     pre_start = meal.meal_time - PRE_WINDOW
     pre_end = meal.meal_time
     post_start = meal.meal_time + POST_WINDOW_START
     post_end = meal.meal_time + POST_WINDOW_END
 
-    readings = db.get_stress_readings(meal.meal_time.date().isoformat())
+    readings = list(readings_by_date.get(meal.meal_time.date().isoformat(), []))
     if post_end.date() != meal.meal_time.date():
-        readings = readings + db.get_stress_readings(post_end.date().isoformat())
+        readings = readings + readings_by_date.get(post_end.date().isoformat(), [])
 
     pre_vals = _window_avg(readings, pre_start, pre_end)
     post_vals = _window_avg(readings, post_start, post_end)
@@ -83,7 +85,7 @@ def _evaluate_meal(db: FirestoreDatabase, meal: Meal) -> MealResult | None:
     )
 
 
-def run_analysis(db: FirestoreDatabase, garmin: GarminClient, tz: ZoneInfo) -> str:
+def run_analysis(db: SheetsDatabase, garmin: GarminClient, tz: ZoneInfo) -> str:
     meals = db.get_all_meals_chronological()
     if len(meals) < 3:
         return (
@@ -97,7 +99,8 @@ def run_analysis(db: FirestoreDatabase, garmin: GarminClient, tz: ZoneInfo) -> s
     except GarminNotAuthenticated as exc:
         return f"Kan geen Garmin-data ophalen: {exc}"
 
-    results = [r for r in (_evaluate_meal(db, m) for m in meals) if r is not None]
+    readings_by_date = db.get_stress_readings_by_dates(needed_dates)
+    results = [r for r in (_evaluate_meal(readings_by_date, m) for m in meals) if r is not None]
     skipped = len(meals) - len(results)
 
     if not results:

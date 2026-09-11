@@ -3,8 +3,10 @@
 Log je maaltijden via Telegram, koppel dat aan je Garmin-stressdata, en zie
 welk eten samenhangt met een hogere lichaamsstress na het eten.
 
-Draait volledig serverless op Google Cloud Run + Firestore: geen server om te
-beheren, geen kosten zolang je binnen de gratis tier blijft (bij een enkele
+Draait serverless op Google Cloud Run; alle data komt in een Google Sheet
+terecht (makkelijk zelf in te kijken, en direct te delen of als CSV te
+exporteren naar een ander tool of een AI). Geen server om te beheren, geen
+kosten zolang je binnen Cloud Run's gratis tier blijft (bij een enkele
 gebruiker met een paar berichten per dag kom je daar niet in de buurt).
 
 ## Hoe het werkt
@@ -17,16 +19,17 @@ gebruiker met een paar berichten per dag kom je daar niet in de buurt).
 2. Elke nacht (en op elk moment dat je `/analyse` gebruikt) haalt een
    Cloud Scheduler-taak je Garmin-stressdata, hartslag en body battery op via
    de onofficiele `garminconnect`-library, en slaat zowel de ruwe API-respons
-   als een geparste versie op in Firestore.
+   als een geparste versie op in het Google Sheet.
 3. `/analyse` vergelijkt per maaltijd de gemiddelde stress 30 min voor het
    eten met 1-2,5 uur erna, en groepeert die verschillen per woord uit je
    berichten ("pizza", "koffie", ...) zodat je ziet welke dingen vaker met een
    piek samenvallen.
 
 Alle ruwe data (volledige Garmin-responses, volledige Telegram-berichten)
-blijft in Firestore staan, ook wat de huidige analyse niet gebruikt. Zo kun
+blijft in het Sheet staan, ook wat de huidige analyse niet gebruikt. Zo kun
 je die data later door iets anders laten analyseren -- een AI, een notebook,
-wat dan ook -- zonder dat je opnieuw hoeft te loggen.
+wat dan ook -- zonder dat je opnieuw hoeft te loggen: deel het Sheet, of
+exporteer een tab als CSV.
 
 Dit is een hulpmiddel om patronen te zien, geen medisch instrument: kleine
 steekproef, correlatie is geen oorzaak, en de tekst-naar-voedsel-herkenning
@@ -37,21 +40,27 @@ is een simpele woordsplitser, geen voedingsdatabase.
 - **Cloud Run**: host de Flask-webapp (`main.py`). Schaalt naar 0 als er
   niets gebeurt, wordt wakker bij een binnenkomend Telegram-bericht of de
   dagelijkse Cloud Scheduler-taak.
-- **Firestore**: opslag. Collecties `meals` (gelogde maaltijden, inclusief
-  het volledige ruwe Telegram-bericht), `garmin_daily` (geparste
-  stresswaarden per dag, voor snelle analyse) en `garmin_raw` (de volledige,
-  onbewerkte Garmin-responses per dag: stress, hartslag, body battery).
-- **Secret Manager**: bewaart je Telegram bot-token en je Garmin-sessietokens.
+- **Google Sheet**: opslag, vijf tabbladen. `meals` (gelogde maaltijden,
+  inclusief het volledige ruwe Telegram-bericht als JSON), `garmin_stress`
+  (geparste stresswaarden, een rij per meting, voor snelle analyse),
+  `garmin_daily` (fetch-status per dag), `garmin_raw` (de volledige,
+  onbewerkte Garmin-responses per dag: stress, hartslag, body battery, als
+  JSON) en `counters` (interne id-teller). De Cloud Run-service krijgt alleen
+  toegang doordat jij het Sheet met het service-account deelt, net zoals je
+  een Sheet met een collega zou delen -- geen GCP-rol nodig.
+- **Secret Manager**: bewaart je Telegram bot-token en je Garmin-sessietokens
+  (niet je Garmin-wachtwoord -- dat komt nergens in de cloud terecht).
 - **Cloud Scheduler**: triggert 1x per dag het ophalen van Garmin-data, zodat
   het archief ook opbouwt op dagen dat je niet expliciet `/analyse` aanroept.
 
 Waarom niet puur Google Apps Script (wat ook gratis bij Workspace hoort):
-Apps Script kan het Telegram-deel prima, maar de Garmin-inlogflow vereist een
-specifieke workaround (`curl_cffi`, TLS-fingerprint van een browser nabootsen)
-om langs Garmin's bot-detectie te komen. Dat is er alleen in de
-Python-library, niet te doen met Apps Script's `UrlFetchApp`. Cloud Run kan
-gewoon een normale Python-container draaien en past qua "geen server
-beheren, gratis tier" bij wat je zocht.
+Apps Script kan het Telegram- en Sheets-deel prima, maar de Garmin-inlogflow
+vereist een specifieke workaround (`curl_cffi`, TLS-fingerprint van een
+browser nabootsen) om langs Garmin's bot-detectie te komen. Dat zit alleen in
+de Python-library, niet te doen met Apps Script's `UrlFetchApp`. Cloud Run
+kan gewoon een normale Python-container draaien en past qua "geen server
+beheren, gratis tier" bij wat je zocht, terwijl de opslag toch een gewoon
+Sheet blijft.
 
 ## Eenmalige setup
 
@@ -76,12 +85,25 @@ cd MyFirstRepo
 ./deploy.sh
 ```
 
-Vraagt om je GCP project-id (of maakt er een aan als je die nog niet hebt --
-zie de Cloud Console als je nog geen project hebt), je Telegram bot-token en
-je user-id, en regelt de rest: APIs inschakelen, Firestore-database, een
-service account met minimale rechten, secrets, de container bouwen en
-deployen, de Telegram-webhook instellen, en de dagelijkse Garmin-fetch
-inplannen.
+Vraagt om je GCP project-id (of maak er een aan in de Cloud Console als je
+nog geen project hebt), je Telegram bot-token en je user-id, en regelt de
+rest: APIs inschakelen, een service account met minimale rechten, secrets,
+de container bouwen en deployen, de Telegram-webhook instellen, en de
+dagelijkse Garmin-fetch inplannen.
+
+Onderweg vraagt het script ook om een spreadsheet-id. Los daarvan op:
+
+- Maak een leeg Google Sheet op sheets.google.com.
+- Klik Delen, en deel 'm als **Editor** met het service-account-e-mailadres
+  dat `deploy.sh` net printte (iets als
+  `meal-stress-bot-sa@<jouw-project-id>.iam.gserviceaccount.com`) -- exact
+  zoals je 'm met een collega zou delen.
+- Kopieer het stuk uit de URL tussen `/d/` en `/edit`
+  (`https://docs.google.com/spreadsheets/d/`**`DIT-STUK`**`/edit`) en plak dat
+  als antwoord in `deploy.sh`.
+
+De vijf tabbladen (meals, garmin_stress, garmin_daily, garmin_raw, counters)
+maakt de bot zelf aan zodra hij voor het eerst draait.
 
 Op dit punt werkt meal-logging al. `/analyse` geeft nog een foutmelding tot
 je ook Garmin gekoppeld hebt:
@@ -122,10 +144,9 @@ pas genoeg data na een paar dagen loggen.
 ## Kosten
 
 Bij een enkele gebruiker blijf je ruim binnen de gratis tiers: Cloud Run (2
-miljoen requests/maand gratis), Firestore (1 GB opslag, 1000 writes/dag
-gratis), Cloud Scheduler (3 taken gratis), Secret Manager (6 actieve
-secret-versies gratis). Er is geen always-on server die 24/7 doorloopt te
-betalen.
+miljoen requests/maand gratis), Cloud Scheduler (3 taken gratis), Secret
+Manager (6 actieve secret-versies gratis). Google Sheets kost sowieso niks.
+Er is geen always-on server die 24/7 doorloopt te betalen.
 
 ## Beperkingen
 
@@ -142,3 +163,9 @@ betalen.
   wordt die maaltijd overgeslagen in de analyse.
 - De onofficiele Garmin-library kan stoppen te werken als Garmin iets aan hun
   backend verandert. Faalt de login blijvend, herhaal dan stap 4.
+- Google Sheets is geen database: bij heel veel jaren aan data (honderdduizenden
+  rijen in `garmin_stress`) loop je op een gegeven moment tegen Sheets' eigen
+  limieten aan (10 miljoen cellen per spreadsheet, ~100 requests/100 sec).
+  `/analyse` leest het stress-tabblad steeds in zijn geheel in (één keer per
+  analyse, niet per maaltijd), dus dat blijft lang werken, maar bij jaren aan
+  data merk je op een gegeven moment dat het trager wordt.
