@@ -1,5 +1,6 @@
 .env
-data/
+.deploy_state.env
+garmin_tokens/
 __pycache__/
 *.pyc
 .venv/
