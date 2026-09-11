@@ -40,7 +40,10 @@ is een simpele woordsplitser, geen voedingsdatabase.
 - **Cloud Run**: host de Flask-webapp (`main.py`). Schaalt naar 0 als er
   niets gebeurt, wordt wakker bij een binnenkomend Telegram-bericht of de
   dagelijkse Cloud Scheduler-taak.
-- **Google Sheet**: opslag, vijf tabbladen. `meals` (gelogde maaltijden,
+- **Google Sheet**: opslag, zes tabbladen. `leesmij` (het eerste tabblad --
+  uitleg over elke tab/kolom, hoe de eigen `/analyse` van de bot werkt, en de
+  kanttekeningen, geschreven zodat een ander tool of een AI de data zonder de
+  broncode kan begrijpen). `meals` (gelogde maaltijden,
   inclusief het volledige ruwe Telegram-bericht als JSON), `garmin_stress`
   (geparste stresswaarden, een rij per meting, voor snelle analyse),
   `garmin_daily` (fetch-status per dag), `garmin_raw` (de volledige,

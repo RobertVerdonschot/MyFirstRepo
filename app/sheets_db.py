@@ -30,6 +30,84 @@ _TABS: list[tuple[str, list[str]]] = [
     ("counters", COUNTERS_HEADER),
 ]
 
+README_TAB = "leesmij"
+README_HEADER = ["onderwerp", "uitleg"]
+README_ROWS = [
+    [
+        "Doel van deze spreadsheet",
+        "Data voor een persoonlijk experiment: hangt lichaamsstress (Garmin) samen "
+        "met wat er gegeten is (via Telegram gelogd)? De tab 'meals' en de "
+        "garmin_* tabs zijn apart gelogd en gekoppeld op tijd, niet handmatig "
+        "gelabeld. Alles hieronder is bedoeld om deze data zelfstandig te kunnen "
+        "analyseren, ook zonder de broncode van de bot te zien.",
+    ],
+    [
+        "Tab: meals",
+        "Een rij per gelogde maaltijd. id: doorlopend nummer. meal_time: "
+        "ISO8601 met tijdzone (Europe/Amsterdam), het moment van eten. "
+        "time_source: 'message' = tijdstip van het Telegram-bericht gebruikt "
+        "(geen tijd genoemd in de tekst); 'parsed' = een expliciete tijd "
+        "('18:30', 'om 8 uur', '8u') is uit de tekst gehaald; 'parsed-approx' = "
+        "alleen 'gisteren' e.d. herkend, dag aangepast maar tijdstip is een "
+        "benadering. raw_text: het letterlijke Telegram-bericht. foods: "
+        "kommagescheiden losse woorden uit raw_text (zie kanttekeningen "
+        "hieronder -- geen voedingsdatabase). raw_update_json: het volledige "
+        "ruwe Telegram-berichtobject, voor als raw_text niet genoeg context geeft.",
+    ],
+    [
+        "Tab: garmin_stress",
+        "Een rij per stressmeting van het Garmin-horloge (doorgaans elke 3 "
+        "minuten als het horloge gedragen werd). date: kalenderdag (YYYY-MM-DD). "
+        "timestamp: ISO8601 met tijdzone. value: Garmin's stress-score, 0-100, "
+        "hoger = meer gemeten lichaamsstress (gebaseerd op hartslagvariabiliteit). "
+        "Negatieve ruwe waarden ('niet gemeten', bv. horloge niet om) zijn er al "
+        "uitgefilterd -- ontbrekende tijdvakken betekenen dus geen meting, niet "
+        "per se lage stress. Dit is het tabblad met de meeste rijen.",
+    ],
+    [
+        "Tab: garmin_daily",
+        "Eén rij per dag: is de Garmin-data voor die dag al opgehaald (ok=TRUE) "
+        "of ging het mis (ok=FALSE, error bevat de foutmelding)? Vooral relevant "
+        "om te zien welke dagen ontbreken in garmin_stress/garmin_raw.",
+    ],
+    [
+        "Tab: garmin_raw",
+        "Eén rij per dag per soort meting (kind: stress / heart_rate / "
+        "body_battery). payload_json bevat de volledige, onbewerkte JSON-respons "
+        "van de Garmin Connect API -- inclusief velden die garmin_stress niet "
+        "gebruikt (bv. max/gemiddelde per dag, body battery-verloop, hartslag "
+        "in rust). Handig als je verder wil kijken dan alleen de stress-score.",
+    ],
+    [
+        "Tab: counters",
+        "Interne administratie van de bot (het volgende maaltijd-id). Niet "
+        "relevant voor analyse.",
+    ],
+    [
+        "Hoe de bot het nu zelf analyseert (/analyse)",
+        "Per maaltijd: gemiddelde garmin_stress-waarde in de 30 minuten voor "
+        "meal_time vergeleken met de gemiddelde waarde 60-150 minuten erna "
+        "(uitgaande van vertraagde spijsverterings-/glycemische respons). Dat "
+        "verschil wordt gegroepeerd per los woord uit foods en gemiddeld. Dit is "
+        "een bewust simpel startpunt -- een woord telt pas mee als het in "
+        "minstens 2 maaltijden voorkomt met genoeg metingen eromheen. Zinvolle "
+        "uitbreidingen: pieken i.p.v. gemiddeldes, andere tijdvensters, "
+        "correctie voor slaap/beweging (niet in deze data aanwezig), combinaties "
+        "van voedingsmiddelen i.p.v. losse woorden, of synoniemen samenvoegen.",
+    ],
+    [
+        "Kanttekeningen (niet als vaststaand overnemen)",
+        "Kleine steekproef (één gebruiker, handmatig gelogd). Correlatie is geen "
+        "oorzaak. foods is een naieve woordsplitser met een stopwoordenlijst, "
+        "geen voedingsdatabase: 'brood' en 'boterham' worden niet gelinkt, en "
+        "niet-voedingswoorden kunnen er per ongeluk tussen staan. Tijdsherkenning "
+        "mist relatieve tijden ('net', 'een uurtje geleden'); check time_source "
+        "voor hoe zeker een meal_time is. Stress wordt ook beinvloed door slaap, "
+        "beweging, werk en andere dingen die hier niet gelogd zijn -- een "
+        "gevonden verband kan dus evengoed toeval of een andere oorzaak zijn.",
+    ],
+]
+
 
 @dataclass
 class Meal:
@@ -44,12 +122,14 @@ class Meal:
 class SheetsDatabase:
     """Google Sheets-backed storage.
 
-    One spreadsheet, five tabs: `meals` (including the full raw Telegram
-    message as JSON), `garmin_stress` (flattened stress readings, what the
-    analysis actually reads), `garmin_daily` (per-date fetch status),
-    `garmin_raw` (untouched Garmin API responses per date/kind, so a
-    different tool can re-derive something the current analysis doesn't),
-    and `counters` (a single running id for meals).
+    One spreadsheet, six tabs: `leesmij` (documentation for a human or a
+    different AI reading this sheet cold: what each tab/column means, how
+    the bot's own analysis works, and its caveats), `meals` (including the
+    full raw Telegram message as JSON), `garmin_stress` (flattened stress
+    readings, what the analysis actually reads), `garmin_daily` (per-date
+    fetch status), `garmin_raw` (untouched Garmin API responses per
+    date/kind, so a different tool can re-derive something the current
+    analysis doesn't), and `counters` (a single running id for meals).
 
     The spreadsheet itself must already exist and be shared (Editor) with
     the service account this runs as -- this class only creates the tabs
@@ -64,6 +144,16 @@ class SheetsDatabase:
 
     def _ensure_tabs(self) -> None:
         existing = {ws.title for ws in self._sheet.worksheets()}
+
+        if README_TAB not in existing:
+            # index=0: put it first so it's the tab someone (or an AI reading
+            # this file) sees when the spreadsheet is opened.
+            readme_ws = self._sheet.add_worksheet(
+                title=README_TAB, rows=1, cols=len(README_HEADER), index=0
+            )
+            readme_ws.append_row(README_HEADER)
+            readme_ws.append_rows(README_ROWS)
+
         for title, header in _TABS:
             if title not in existing:
                 # rows=1: start minimal and let gspread grow the sheet as we
