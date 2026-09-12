@@ -163,7 +163,7 @@ if gcloud scheduler jobs describe fetch-garmin-daily --project "$PROJECT_ID" --l
   gcloud scheduler jobs update http fetch-garmin-daily \
     --project "$PROJECT_ID" --location "$REGION" \
     --uri="${SERVICE_URL}/tasks/fetch-garmin" --http-method=POST \
-    --headers="X-Scheduler-Secret=${SCHEDULER_SHARED_SECRET}" \
+    --update-headers="X-Scheduler-Secret=${SCHEDULER_SHARED_SECRET}" \
     --schedule="50 23 * * *" --time-zone="$TIMEZONE"
 else
   gcloud scheduler jobs create http fetch-garmin-daily \
