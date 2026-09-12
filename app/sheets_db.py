@@ -85,15 +85,29 @@ README_ROWS = [
     ],
     [
         "Hoe de bot het nu zelf analyseert (/analyse)",
-        "Per maaltijd: gemiddelde garmin_stress-waarde in de 30 minuten voor "
-        "meal_time vergeleken met de gemiddelde waarde 60-150 minuten erna "
-        "(uitgaande van vertraagde spijsverterings-/glycemische respons). Dat "
-        "verschil wordt gegroepeerd per los woord uit foods en gemiddeld. Dit is "
-        "een bewust simpel startpunt -- een woord telt pas mee als het in "
-        "minstens 2 maaltijden voorkomt met genoeg metingen eromheen. Zinvolle "
-        "uitbreidingen: pieken i.p.v. gemiddeldes, andere tijdvensters, "
-        "correctie voor slaap/beweging (niet in deze data aanwezig), combinaties "
-        "van voedingsmiddelen i.p.v. losse woorden, of synoniemen samenvoegen.",
+        "Per maaltijd worden twee dingen berekend uit garmin_stress, en allebei "
+        "gegroepeerd per los woord uit foods:"
+        "\n1) Relatieve verandering: gemiddelde stress 60-150 min na meal_time "
+        "min gemiddelde stress 30 min ervoor (uitgaande van vertraagde "
+        "spijsverterings-/glycemische respons)."
+        "\n2) Absolute stress na het eten: gewoon de gemiddelde stress 60-150 min "
+        "na meal_time, los van het niveau ervoor."
+        "\nReden om beide te tonen: de periode vlak voor het eten is niet altijd "
+        "een schone nulmeting. Bijvoorbeeld een uur staan koken geeft zelf al "
+        "stress, en meteen daarna eten laat de relatieve verandering dan negatief "
+        "lijken (stress zakt na het koken), terwijl de absolute stress na het eten "
+        "prima een teken van een probleem-voedingsmiddel kan zijn. Andersom: iets "
+        "dat toevallig na een rustig moment gegeten wordt scoort al snel hoog "
+        "relatief, ook als de absolute stress erna niet bijzonder is. Een "
+        "voedingswoord dat op beide metrieken hoog scoort is een sterker signaal "
+        "dan een woord dat alleen op een van de twee hoog scoort. Voor beide "
+        "geldt: een woord telt pas mee in het hoofdoverzicht als het in minstens "
+        "2 maaltijden voorkomt met genoeg metingen eromheen; minder wordt apart "
+        "als losse waarneming getoond. Zinvolle uitbreidingen voor wie hier "
+        "dieper induikt: pieken i.p.v. gemiddeldes, andere tijdvensters, "
+        "correctie voor slaap/beweging (niet in deze data aanwezig, wel deels af "
+        "te leiden uit garmin_raw), combinaties van voedingsmiddelen i.p.v. losse "
+        "woorden, of synoniemen samenvoegen.",
     ],
     [
         "Kanttekeningen (niet als vaststaand overnemen)",
