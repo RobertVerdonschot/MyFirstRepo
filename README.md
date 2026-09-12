@@ -127,13 +127,24 @@ Docker al klaarstaan):
 ```bash
 docker run --rm -it -v "$PWD:/work" -w /work python:3.12-slim bash -c \
   "pip install -q garminconnect && python scripts/garmin_login_setup.py garmin_tokens"
+sudo chown -R "$(id -u):$(id -g)" garmin_tokens
 ./scripts/pack_and_upload_garmin_tokens.sh garmin_tokens "$(gcloud config get-value project)"
 ./deploy.sh
 ```
 
+De `sudo chown` is nodig omdat de container als root draait: zonder die stap is
+de `garmin_tokens`-map op de host eigendom van root en krijg je bij de
+volgende regel `tar: .: Cannot stat: Permission denied`.
+
 De laatste `./deploy.sh` herdeployt de service zodat hij de net geuploade
 Garmin-tokens oppikt (je eerder ingevulde antwoorden staan in
 `.deploy_state.env`, dus je hoeft niet alles opnieuw in te typen).
+
+MFA-code gevraagd? Typ 'm meteen over uit je authenticator-app op het moment
+zelf -- die codes zijn maar ~30 seconden geldig, een oudere code laat het
+inloggen mislukken. Krijg je op de eerste twee regels `429`
+("rate limited")? Dat is normaal, de library valt automatisch terug op een
+volgende inlogmethode; wacht gewoon de MFA-prompt af.
 
 ### 5. Testen
 
