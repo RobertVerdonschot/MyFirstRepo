@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Wat vliegt daar?</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0f172a">
+<style>
+  :root {
+    --bg: #f1f5f9; --card: #ffffff; --text: #0f172a; --muted: #64748b;
+    --line: #e2e8f0; --accent: #0e7490;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f172a; --card: #1e293b; --text: #f1f5f9; --muted: #94a3b8;
+      --line: #334155; --accent: #22d3ee;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: max(16px, env(safe-area-inset-top)) 16px 32px;
+  }
+  main { max-width: 520px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 4px 0 16px; font-weight: 600; }
+  .card {
+    background: var(--card); border-radius: 16px; padding: 18px;
+    margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  }
+  .top { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 14px; }
+  .tag { background: var(--accent); color: var(--card); border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 600; }
+  .route { font-size: 24px; font-weight: 700; margin: 6px 0 2px; overflow-wrap: anywhere; }
+  .route .arrow { color: var(--accent); margin: 0 4px; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 14px; }
+  dl { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; margin: 0; }
+  dt { color: var(--muted); font-size: 13px; }
+  dd { margin: 0; font-size: 18px; font-weight: 600; }
+  .msg { text-align: center; color: var(--muted); padding: 40px 12px; }
+  .msg strong { display: block; color: var(--text); font-size: 18px; margin-bottom: 6px; }
+  footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 18px; }
+  button {
+    font: inherit; background: var(--accent); color: var(--card); border: 0;
+    border-radius: 10px; padding: 10px 18px; margin-top: 14px; font-weight: 600;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Wat vliegt daar?</h1>
+  <div id="content"><div class="card msg"><strong>Even je locatie zoeken...</strong></div></div>
+  <footer id="footer"></footer>
+</main>
+<script>
+const REFRESH_MS = 15000;
+const content = document.getElementById('content');
+const footer = document.getElementById('footer');
+let position = null;
+let timer = null;
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = n => n.toLocaleString('nl-NL');
+const km = m => m < 1000 ? `${num(Math.round(m / 10) * 10)} m` : `${(m / 1000).toLocaleString('nl-NL', {maximumFractionDigits: 1})} km`;
+
+function message(title, text, withButton) {
+  content.innerHTML = `<div class="card msg"><strong>${esc(title)}</strong>${esc(text)}` +
+    (withButton ? `<br><button onclick="refresh()">Opnieuw</button>` : '') + `</div>`;
+}
+
+function place(a) {
+  if (!a) return null;
+  return a.city || a.name || a.code;
+}
+
+function card(p) {
+  const from = place(p.from), to = place(p.to);
+  const kind = p.is_helicopter ? 'Helikopter' : 'Vliegtuig';
+  const title = from && to
+    ? `${esc(from)}<span class="arrow">&rarr;</span>${esc(to)}`
+    : (p.is_helicopter ? 'Helikopter' : 'Route onbekend');
+  const subParts = [];
+  if (from && to) subParts.push(`${esc(p.from.name)} naar ${esc(p.to.name)}`);
+  const who = [p.airline, p.flight_number || p.callsign].filter(Boolean).map(esc).join(' &middot; ');
+  const vertical = {stijgt: ', stijgt', daalt: ', daalt'}[p.vertical] || '';
+  const where = p.direction ? `${km(p.distance_m)} ${p.direction}` : 'recht boven je';
+  return `<div class="card">
+    <div class="top"><span>${who || esc(p.registration || 'Onbekend toestel')}</span><span class="tag">${kind}</span></div>
+    <div class="route">${title}</div>
+    <div class="sub">${subParts.join('') || '&nbsp;'}</div>
+    <dl>
+      <div><dt>Hoogte</dt><dd>${p.altitude_m != null ? num(p.altitude_m) + ' m' : '?'}${vertical}</dd></div>
+      <div><dt>Snelheid</dt><dd>${p.speed_kmh != null ? num(p.speed_kmh) + ' km/u' : '?'}</dd></div>
+      <div><dt>Toestel</dt><dd>${esc(p.aircraft_type || '?')}</dd></div>
+      <div><dt>Waar</dt><dd>${esc(where)}</dd></div>
+      <div><dt>Vliegt richting</dt><dd>${esc(p.heading || '?')}</dd></div>
+      <div><dt>Registratie</dt><dd>${esc(p.registration || '?')}</dd></div>
+    </dl>
+  </div>`;
+}
+
+async function refresh() {
+  if (!position) return;
+  const {latitude, longitude} = position.coords;
+  try {
+    const r = await fetch(`/api/overhead?lat=${latitude.toFixed(4)}&lon=${longitude.toFixed(4)}`);
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Er ging iets mis.');
+    if (data.overhead.length) {
+      content.innerHTML = data.overhead.map(card).join('');
+    } else if (data.nearest) {
+      const n = data.nearest;
+      const name = n.callsign || n.registration || 'een toestel';
+      message('Niks boven je hoofd', `Dichtstbij: ${name}, ${km(n.distance_m)} ${n.direction || ''}.`);
+    } else {
+      message('Niks boven je hoofd', 'Ook in de buurt vliegt nu niks.');
+    }
+    footer.textContent = `Bijgewerkt ${new Date().toLocaleTimeString('nl-NL')} · ververst elke 15 s · data: adsb.fi, adsb.lol, adsbdb.com`;
+  } catch (e) {
+    message('Lukt even niet', e.message || 'Geen verbinding.', true);
+  }
+}
+
+function start() {
+  if (!navigator.geolocation) {
+    message('Geen locatie', 'Je browser geeft geen locatie door.');
+    return;
+  }
+  navigator.geolocation.watchPosition(
+    pos => { const first = !position; position = pos; if (first) refresh(); },
+    err => message('Geen locatie',
+      err.code === 1 ? 'Geef de app toestemming voor je locatie (instellingen van je browser).' : 'Locatie niet gevonden.', true),
+    {enableHighAccuracy: false, maximumAge: 30000, timeout: 20000}
+  );
+  clearInterval(timer);
+  timer = setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+}
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+start();
+</script>
+</body>
+</html>
