@@ -209,7 +209,3 @@ Er is geen always-on server die 24/7 doorloopt te betalen.
   `/analyse` leest het stress-tabblad steeds in zijn geheel in (één keer per
   analyse, niet per maaltijd), dus dat blijft lang werken, maar bij jaren aan
   data merk je op een gegeven moment dat het trager wordt.
-
-## Ook in deze repo
-
-`flighttracker/`: losse, simpele app die laat zien welk vliegtuig er boven je vliegt. Zie [flighttracker/README.md](flighttracker/README.md).
