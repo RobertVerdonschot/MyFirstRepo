@@ -18,9 +18,9 @@ concurrency:
 
 env:
   # Ingevuld na scripts/setup_github_deploy.sh (geen geheimen).
-  GCP_PROJECT_ID: VUL_IN
-  GCP_WIF_PROVIDER: VUL_IN
-  GCP_DEPLOYER_SA: VUL_IN
+  GCP_PROJECT_ID: meal-stress-analyzer
+  GCP_WIF_PROVIDER: projects/78139393955/locations/global/workloadIdentityPools/github/providers/github-oidc
+  GCP_DEPLOYER_SA: github-deployer@meal-stress-analyzer.iam.gserviceaccount.com
 
 jobs:
   deploy:
