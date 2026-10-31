@@ -1,0 +1,50 @@
+name: Deploy
+
+# Deployt naar Cloud Run via deploy.sh. Start automatisch na een merge naar de
+# hoofdbranch, of handmatig (ook door Claude) via "Run workflow".
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/meal-stress-analyzer-n0g9ak]
+    paths-ignore: ['**.md']
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  # Ingevuld na scripts/setup_github_deploy.sh (geen geheimen).
+  GCP_PROJECT_ID: meal-stress-analyzer
+  GCP_WIF_PROVIDER: projects/78139393955/locations/global/workloadIdentityPools/github/providers/github-oidc
+  GCP_DEPLOYER_SA: github-deployer@meal-stress-analyzer.iam.gserviceaccount.com
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check config
+        run: |
+          if [ "$GCP_PROJECT_ID" = "VUL_IN" ]; then
+            echo "::error::Workflow nog niet geconfigureerd, draai eerst scripts/setup_github_deploy.sh"
+            exit 1
+          fi
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.GCP_WIF_PROVIDER }}
+          service_account: ${{ env.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy
+        env:
+          PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
+          SKIP_API_ENABLE: "1"
+        run: ./deploy.sh < /dev/null

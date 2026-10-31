@@ -168,6 +168,28 @@ Kwijt of gelekt? Verwijder de `WEBAPP_TOKEN`-regel uit `.deploy_state.env` en
 draai `./deploy.sh` opnieuw voor een nieuwe token, en maak een nieuwe
 snelkoppeling.
 
+### 7. Deployen via GitHub (optioneel, zodat Claude zelf kan deployen)
+
+Na de eerste geslaagde `./deploy.sh` kun je GitHub Actions laten deployen.
+Er komt geen service-account-key aan te pas: GitHub logt in via Workload
+Identity Federation, en alleen deze repo mag dat. Eenmalig in Cloud Shell:
+
+```bash
+git pull
+./scripts/setup_github_deploy.sh
+```
+
+Dat maakt een apart service account `github-deployer` aan met alleen de
+rechten om te deployen, en print drie regels (geen geheimen) die in
+`.github/workflows/deploy.yml` komen. Daarna deployt de workflow vanzelf na
+elke merge naar de hoofdbranch, en kun je 'm (of Claude) ook handmatig starten
+via Actions > Deploy > Run workflow.
+
+`deploy.sh` haalt in die modus alle instellingen en tokens uit de draaiende
+Cloud Run-service en Secret Manager, dus je webapp-snelkoppeling blijft
+werken. De repo is publiek, dus tokens worden in de Actions-log gemaskeerd en
+de webapp-URL wordt daar niet geprint. Garmin-login blijft handwerk (stap 4).
+
 ## Gebruik
 
 **Via Telegram:**
