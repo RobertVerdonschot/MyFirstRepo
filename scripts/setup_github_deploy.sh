@@ -16,7 +16,9 @@ PROVIDER_ID="github-oidc"
 
 PROJECT_ID="$(gcloud config get-value project 2>/dev/null || true)"
 if [ -z "$PROJECT_ID" ] || [ "$PROJECT_ID" = "(unset)" ]; then
-  read -rp "GCP project-id: " PROJECT_ID
+  echo "Geen project ingesteld. Je projecten:"
+  gcloud projects list --format="table(projectId,name)"
+  read -rp "Typ de PROJECT_ID waar de bot in draait: " PROJECT_ID
   gcloud config set project "$PROJECT_ID"
 fi
 PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
@@ -25,6 +27,17 @@ RUNTIME_SA="${RUNTIME_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 COMPUTE_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 
 echo "Project: $PROJECT_ID ($PROJECT_NUMBER) | Repo: $REPO"
+
+# Dit script bouwt voort op een eerste geslaagde ./deploy.sh.
+if ! gcloud iam service-accounts describe "$RUNTIME_SA" --project "$PROJECT_ID" >/dev/null 2>&1 \
+   || ! gcloud run services describe "${SERVICE_NAME:-meal-stress-bot}" --project "$PROJECT_ID" \
+        --region "$REGION" >/dev/null 2>&1; then
+  echo
+  echo "FOUT: in project $PROJECT_ID draait de bot nog niet (geen service account"
+  echo "$RUNTIME_SA of geen Cloud Run-service). Draai eerst ./deploy.sh, of kies"
+  echo "het juiste project met: gcloud config set project <PROJECT_ID>"
+  exit 1
+fi
 
 echo "-- APIs --"
 gcloud services enable iam.googleapis.com iamcredentials.googleapis.com sts.googleapis.com \
